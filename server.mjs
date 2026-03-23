@@ -183,7 +183,7 @@ createServer(async (req, res) => {
   // ── POST /api/select — HTML click → MCP channel notification ─────────────
   if (req.method === 'POST' && req.url === '/api/select') {
     const body = await readBody(req);
-    const { name = 'item', path = '', prompt = '', drill_down, context } = body;
+    const { name = 'item', path = '', prompt = '', drill_down, context, qa } = body;
 
     if (inFlightByKey.has(name)) {
       const existing = inFlightByKey.get(name);
@@ -204,7 +204,7 @@ createServer(async (req, res) => {
     await mcp.notification({
       method: 'notifications/claude/channel',
       params: {
-        content: JSON.stringify({ name, path, prompt, reply_id, drill_down, context }),
+        content: JSON.stringify({ name, path, prompt, reply_id, drill_down, context, qa }),
         meta: {
           name:     name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 64),
           reply_id: reply_id.slice(0, 64),

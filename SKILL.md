@@ -41,6 +41,12 @@ body{margin:0;background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMa
 .lo-spinner{width:28px;height:28px;border:3px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:spin .8s linear infinite}
 .lo-label{font-size:13px;color:#8b949e}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Drill-down indicators — applied automatically to any [data-claude] element */
+[data-claude]{cursor:pointer;position:relative;transition:box-shadow .18s,border-color .18s}
+[data-claude]:hover{box-shadow:0 0 0 2px #388bfd!important;border-color:#388bfd!important}
+[data-claude]::after{content:'⤵';position:absolute;top:6px;right:8px;font-size:11px;color:#58a6ff;opacity:.5;pointer-events:none;line-height:1}
+[data-claude]:hover::after{opacity:1}
+
 /* ... your page styles ... */
 </style>
 </head>
@@ -61,6 +67,22 @@ body{margin:0;background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMa
 
 <!-- Toast -->
 <div id="toast" style="position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(80px);background:#1a3a22;border:1px solid #3fb950;color:#56d364;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;transition:transform .25s,opacity .25s;opacity:0;pointer-events:none"></div>
+
+<!-- Q&A panel (completely independent of #content and navigation stack) -->
+<div id="qa-panel" style="display:none;position:fixed;bottom:0;right:0;width:380px;max-height:60vh;background:#161b22;border:1px solid #30363d;border-radius:10px 10px 0 0;z-index:300;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.5)">
+  <div style="padding:10px 16px;background:#1f2937;border-bottom:1px solid #30363d;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between">
+    <span style="font-size:13px;font-weight:600;color:#e6edf3">Ask about this visualization</span>
+    <button onclick="toggleQA()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:16px;padding:0 4px;line-height:1">&times;</button>
+  </div>
+  <div id="qa-history" style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:12px;min-height:60px"></div>
+  <div style="padding:10px 12px;border-top:1px solid #30363d;display:flex;gap:8px">
+    <input id="qa-input" type="text" placeholder="Ask a question…" onkeydown="if(event.key==='Enter')sendQuestion()" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;padding:6px 10px;font-size:13px;outline:none">
+    <button onclick="sendQuestion()" style="background:#238636;border:none;border-radius:6px;color:#fff;padding:6px 14px;font-size:13px;cursor:pointer;white-space:nowrap">Ask</button>
+  </div>
+</div>
+
+<!-- Q&A toggle button (fixed bottom-right) -->
+<button id="qa-toggle-btn" onclick="toggleQA()" style="position:fixed;bottom:24px;right:24px;z-index:299;background:#238636;border:none;border-radius:20px;color:#fff;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.4)">? Ask</button>
 
 <!-- Main content area (root content inline; drill-downs injected here) -->
 <div id="content">
@@ -206,6 +228,94 @@ async function checkSrv() {
   }
 }
 checkSrv(); setInterval(checkSrv, 5000);
+
+// ── Q&A panel (independent of drill-down flow) ────────────────────────────────
+let _qaOpen = false;
+
+function toggleQA() {
+  _qaOpen = !_qaOpen;
+  const panel = document.getElementById('qa-panel');
+  const btn   = document.getElementById('qa-toggle-btn');
+  panel.style.display = _qaOpen ? 'flex' : 'none';
+  btn.style.display   = _qaOpen ? 'none' : '';
+  if (_qaOpen) document.getElementById('qa-input').focus();
+}
+
+function _qaAppend(role, text, pending) {
+  const history = document.getElementById('qa-history');
+  const el = document.createElement('div');
+  el.style.cssText = role === 'user'
+    ? 'font-size:13px;color:#79c0ff;padding:6px 10px;background:#1f3a5f;border-radius:8px;align-self:flex-end;max-width:90%;word-break:break-word'
+    : 'font-size:13px;color:#c9d1d9;padding:6px 10px;background:#21262d;border-radius:8px;align-self:flex-start;max-width:90%;word-break:break-word;white-space:pre-wrap';
+  el.textContent = text;
+  if (pending) el.id = 'qa-pending';
+  history.appendChild(el);
+  history.scrollTop = history.scrollHeight;
+  return el;
+}
+
+async function sendQuestion() {
+  const input = document.getElementById('qa-input');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  input.disabled = true;
+
+  _qaAppend('user', q);
+  const pending = _qaAppend('assistant', '…', true);
+
+  // Context = page title + current content heading (best-effort)
+  const pageTitle = document.title || 'this visualization';
+  const h2 = document.querySelector('#content h2,#content h3');
+  const scope = h2 ? `${pageTitle} > ${h2.textContent.trim()}` : pageTitle;
+
+  const replyId = 'qa-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+  // SSE for the answer — handled separately, never touches #content or _stack
+  const es = new EventSource('http://localhost:3747/api/stream/' + replyId);
+  let retries = 0;
+
+  function handleAnswer(content) {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.answer) { pending.textContent = parsed.answer; return; }
+      if (parsed.html)   { pending.textContent = parsed.html.replace(/<[^>]+>/g, ''); return; }
+    } catch (_) {}
+    pending.textContent = content;
+  }
+
+  es.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.done) { es.close(); input.disabled = false; input.focus(); return; }
+    if (d.content) { es.close(); handleAnswer(d.content); input.disabled = false; input.focus(); }
+  };
+  es.onerror = () => {
+    retries++;
+    if (retries > 3) {
+      es.close();
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch('http://localhost:3747/api/result/' + replyId, { signal: AbortSignal.timeout(2000) });
+          if (r.ok) { const d = await r.json(); if (d.content) { clearInterval(poll); handleAnswer(d.content); input.disabled = false; input.focus(); } }
+        } catch (_) {}
+      }, 2000);
+      setTimeout(() => { clearInterval(poll); pending.textContent = '(timed out)'; input.disabled = false; }, 120000);
+    }
+  };
+
+  try {
+    await fetch('http://localhost:3747/api/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'question', prompt: q, context: scope, reply_id: replyId, drill_down: false, qa: true }),
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch (_) {
+    pending.textContent = '(channel offline — is Claude Code running with server:viz?)';
+    input.disabled = false;
+    es.close();
+  }
+}
 </script>
 
 </body>
@@ -218,19 +328,33 @@ Keep HTML self-contained (no CDN). Dark theme: `#0d1117` background, GitHub-styl
 
 ---
 
-### Mode 2 — React to a viz click (drill-down, generate sub-viz fragment)
+### Mode 2 — React to a viz channel event
 
 When a `<channel source="viz">` event arrives, the body is JSON:
-- `name` — display label of clicked item
+- `name` — label of the clicked item or `"question"` for Q&A
 - `path` — source path hint
-- `prompt` — self-contained analysis request
+- `prompt` — the question text or drill-down request
 - `reply_id` — ID to pass to `send_analysis`
-- `drill_down` — always `true`
-- `context` — optional extra context about the parent component
+- `drill_down` — `true` for drill-down, `false` for Q&A
+- `qa` — `true` when this is a Q&A question (not a drill-down)
+- `context` — current page scope (page title + active heading) for Q&A, or component summary for drill-downs
+
+#### If `qa: true` — answer the question
+
+Read source files if helpful. Write a concise, direct answer (plain text, a few sentences to a paragraph).
+
+Call:
+```
+send_analysis(reply_id, JSON.stringify({ answer: "<plain text answer>" }))
+```
+
+The answer appears in the Q&A panel only — **never** in `#content`, never affects navigation. Do not generate HTML.
+
+#### If `drill_down: true` — generate a sub-viz fragment
 
 **Generate a focused inner HTML fragment — no `<html>/<head>/<body>` tags, no file writes, no `open` command.**
 
-The fragment will be injected into `#content` of the parent page in-place. Keep it self-contained CSS-wise (inline `<style>` is fine). Include clickable items with `data-claude`/`data-name`/`data-context` so further drill-downs work.
+The fragment is injected into `#content` in-place. Keep it self-contained CSS-wise (inline `<style>` is fine). Include `data-claude`/`data-name`/`data-context` on clickable items so further drill-downs work.
 
 Fragment structure example:
 ```html
@@ -242,14 +366,14 @@ Fragment structure example:
 </div>
 ```
 
-Once ready, call:
+Call:
 ```
 send_analysis(reply_id, JSON.stringify({ html: "<the fragment HTML string>" }))
 ```
 
-The parent page receives this, calls `pushContent(fragment)`, and renders it in-place. The Back button appears automatically. The fragment itself can contain `data-claude` items that trigger further drill-downs.
+The parent page calls `pushContent(fragment)` and renders it in-place. The Back button appears automatically.
 
-**Do not** use the Write tool, `set_viz_page`, or the Bash `open` command for drill-down responses.
+**Do not** use the Write tool, `set_viz_page`, or the Bash `open` command for either response type.
 
 ---
 
