@@ -125,23 +125,26 @@ function attachSSE(replyId, name, doneCb) {
   const es = new EventSource('http://localhost:3747/api/stream/' + replyId);
 
   function handleContent(content, name) {
+    let html = null, answer = null;
     try {
       const parsed = JSON.parse(content);
-      if (parsed.html) {
-        if (name) _cache.set(name, parsed.html);
-        pushContent(parsed.html);
-        doneCb();
-        return;
-      }
-      // If Claude returned {answer:...} for a drill-down by mistake, show it as text
-      if (parsed.answer) {
-        pushContent(`<div style="padding:24px;color:#c9d1d9;font-size:14px;white-space:pre-wrap">${parsed.answer}</div>`);
-        doneCb();
-        return;
-      }
-    } catch (_) {}
-    // Unknown format — show raw so it's not silently lost
-    pushContent(`<div style="padding:24px;color:#8b949e;font-size:13px;white-space:pre-wrap">${content}</div>`);
+      html   = parsed.html   || null;
+      answer = parsed.answer || null;
+    } catch (_) {
+      // Not valid JSON — treat as raw HTML (Claude skipped JSON.stringify)
+      html = content;
+    }
+    if (html) {
+      if (name) _cache.set(name, html);
+      pushContent(html);
+      doneCb();
+      return;
+    }
+    if (answer) {
+      pushContent(`<div style="padding:24px;color:#c9d1d9;font-size:14px;white-space:pre-wrap">${answer}</div>`);
+      doneCb();
+      return;
+    }
     doneCb();
   }
 

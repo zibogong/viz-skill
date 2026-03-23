@@ -109,8 +109,21 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 
   // ── send_analysis ──────────────────────────────────────────────────────────
   if (req.params.name === 'send_analysis') {
-    const { reply_id, content } = req.params.arguments;
+    let { reply_id, content } = req.params.arguments;
     const id = String(reply_id);
+
+    // Normalize: if content is not valid JSON, treat it as raw HTML or plain answer text.
+    // This makes the API tolerant of Claude not calling JSON.stringify correctly.
+    try {
+      JSON.parse(String(content));
+    } catch (_) {
+      const raw = String(content).trim();
+      if (raw.startsWith('<')) {
+        content = JSON.stringify({ html: raw });
+      } else {
+        content = JSON.stringify({ answer: raw });
+      }
+    }
 
     if (sentIds.has(id)) {
       return { content: [{ type: 'text', text: 'Duplicate send_analysis ignored.' }] };
