@@ -69,7 +69,7 @@ body{margin:0;background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMa
 <div id="toast" style="position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(80px);background:#1a3a22;border:1px solid #3fb950;color:#56d364;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;transition:transform .25s,opacity .25s;opacity:0;pointer-events:none"></div>
 
 <!-- Q&A panel (completely independent of #content and navigation stack) -->
-<div id="qa-panel" style="display:none;position:fixed;bottom:0;right:0;width:380px;max-height:60vh;background:#161b22;border:1px solid #30363d;border-radius:10px 10px 0 0;z-index:300;display:flex;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.5)">
+<div id="qa-panel" style="display:none;position:fixed;bottom:0;right:0;width:380px;max-height:60vh;background:#161b22;border:1px solid #30363d;border-radius:10px 10px 0 0;z-index:300;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.5)">
   <div style="padding:10px 16px;background:#1f2937;border-bottom:1px solid #30363d;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between">
     <span style="font-size:13px;font-weight:600;color:#e6edf3">Ask about this visualization</span>
     <button onclick="toggleQA()" style="background:none;border:none;color:#8b949e;cursor:pointer;font-size:16px;padding:0 4px;line-height:1">&times;</button>
@@ -133,7 +133,15 @@ function attachSSE(replyId, name, doneCb) {
         doneCb();
         return;
       }
+      // If Claude returned {answer:...} for a drill-down by mistake, show it as text
+      if (parsed.answer) {
+        pushContent(`<div style="padding:24px;color:#c9d1d9;font-size:14px;white-space:pre-wrap">${parsed.answer}</div>`);
+        doneCb();
+        return;
+      }
     } catch (_) {}
+    // Unknown format — show raw so it's not silently lost
+    pushContent(`<div style="padding:24px;color:#8b949e;font-size:13px;white-space:pre-wrap">${content}</div>`);
     doneCb();
   }
 
@@ -237,7 +245,7 @@ function toggleQA() {
   const panel = document.getElementById('qa-panel');
   const btn   = document.getElementById('qa-toggle-btn');
   panel.style.display = _qaOpen ? 'flex' : 'none';
-  btn.style.display   = _qaOpen ? 'none' : '';
+  btn.style.display   = _qaOpen ? 'none' : 'block';
   if (_qaOpen) document.getElementById('qa-input').focus();
 }
 

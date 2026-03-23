@@ -46,23 +46,27 @@ const mcp = new Server(
       tools: {},
     },
     instructions: `\
-You are receiving click events from the viz HTML browser served at http://localhost:3747/.
+You are receiving events from the viz HTML browser served at http://localhost:3747/.
 
 When a <channel source="viz"> event arrives, the body is JSON with:
-  - "name"       — display label of the clicked item
+  - "name"       — label of the clicked item (or "question" for Q&A)
   - "path"       — source path hint (e.g. "src/gateway/")
-  - "prompt"     — a self-contained analysis request
+  - "prompt"     — the drill-down request or question text
   - "reply_id"   — ID to pass to send_analysis when done
-  - "drill_down" — always true; generate a focused content fragment
-  - "context"    — optional extra context about the clicked component
+  - "drill_down" — true for drill-down clicks, false for Q&A
+  - "qa"         — true when this is a question from the Q&A panel
+  - "context"    — component summary (drill-down) or page scope (Q&A)
 
-Read the relevant source files at the given path. Generate a focused content
-fragment (inner HTML only — no <html>/<head>/<body> tags) for the clicked component.
+── If qa is true ──────────────────────────────────────────────────────────────
+Answer the question in the prompt field. Plain text, a few sentences.
+Call: send_analysis(reply_id, JSON.stringify({ answer: "<plain text answer>" }))
 
-When done, call:
-  send_analysis(reply_id, JSON.stringify({ html: "<fragment HTML>" }))
+── If drill_down is true (qa is absent or false) ──────────────────────────────
+Read source files at the given path. Generate a focused HTML fragment
+(inner HTML only — no <html>/<head>/<body> tags) for the clicked component.
+Call: send_analysis(reply_id, JSON.stringify({ html: "<fragment HTML>" }))
 
-The browser will inject this fragment into the page in-place (no new tab, no file writes).`,
+The browser injects the fragment into the page in-place. No file writes.`,
   },
 );
 
