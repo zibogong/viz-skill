@@ -16,13 +16,24 @@ Analyze the current conversation context and generate a focused, interactive HTM
 
 **Do NOT** write to `/tmp` or any local file. Do NOT use the Write tool. The server hosts the page at `http://localhost:3747/`.
 
+#### Writing style — non-technical first
+
+Visualizations are read by everyone, not just engineers. Apply these rules to all generated content:
+
+- **Plain labels**: write what something *does*, not what it *is* technically. Use "Handles login and signup" not "AuthService". Use "Stores user data" not "UserRepository".
+- **No jargon in cards**: avoid words like "singleton", "middleware", "handler", "controller", "interface", "abstract", "instantiate". If a technical term is unavoidable, add a plain-English parenthetical.
+- **Active descriptions**: use short action phrases — "Checks if the user is logged in", "Sends email notifications", "Saves files to disk".
+- **Emoji anchors**: add a single emoji to each card title to give it a visual identity (e.g. "Login & Signup", "Email Sender", "File Storage"). Use intuitive, universal emojis.
+- **Humanize groupings**: group things by *what users experience*, not by internal technical layers. "What happens when you log in" is better than "Auth pipeline".
+- **Sub-viz fragments**: when drilling down, open with one sentence in plain English about what this component does for the user before any technical detail.
+
 #### Pick the right structure
 
-- **Architecture / system**: layered boxes with arrows showing data flow
-- **Module / file**: function/class graph (nodes = symbols, edges = calls/uses)
-- **Concept / explanation**: card grid or mind map
-- **Comparison**: side-by-side table or split cards
-- **Sequence / flow**: numbered step timeline
+- **Architecture / system**: layered boxes with arrows showing data flow — label arrows with plain verbs ("sends", "stores", "reads")
+- **Module / file**: card grid grouped by user-facing purpose, not file structure
+- **Concept / explanation**: card grid or mind map with relatable analogies
+- **Comparison**: side-by-side table with plain-English row labels
+- **Sequence / flow**: numbered step timeline written as user actions ("User clicks Login", "System checks password")
 
 #### HTML template (complete boilerplate — copy exactly)
 
@@ -367,13 +378,16 @@ The answer appears in the Q&A panel only — **never** in `#content`, never affe
 
 The fragment is injected into `#content` in-place. Keep it self-contained CSS-wise (inline `<style>` is fine). Include `data-claude`/`data-name`/`data-context` on clickable items so further drill-downs work.
 
+Apply the same plain-language rules as Mode 1: emoji titles, action-phrase descriptions, no jargon. Open each fragment with a one-sentence plain-English summary of what this piece does before any detail cards.
+
 Fragment structure example:
 ```html
 <style>/* fragment-specific styles */</style>
 <div style="padding:24px">
-  <h2 style="color:#e6edf3;margin:0 0 16px">COMPONENT_NAME</h2>
-  <!-- cards, lists, diagrams for this component -->
-  <div data-claude="Analyze X in detail..." data-name="X" data-context="X handles ...">...</div>
+  <p style="color:#8b949e;font-size:14px;margin:0 0 20px">This is where users log in, reset passwords, and manage their account security.</p>
+  <h2 style="color:#e6edf3;margin:0 0 16px"> Login & Signup</h2>
+  <!-- cards with plain-English labels -->
+  <div data-claude="Explain how password reset works in plain English..." data-name="Password Reset" data-context="Sends a reset link by email">...</div>
 </div>
 ```
 
